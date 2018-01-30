@@ -1,4 +1,7 @@
 'use strict';
+
+const _ = require('lodash');
+const extend = _.merge;
 const Generator = require('yeoman-generator');
 
 module.exports = class extends Generator {
@@ -10,9 +13,11 @@ module.exports = class extends Generator {
       type: String
     });
 
-    this.option('rjs', {
-      desc: 'Add support for RequireJS',
-      type: Boolean
+    this.option('testRoot', {
+      type: String,
+      required: false,
+      default: 'test',
+      desc: 'Relative path to the test code root'
     });
   }
 
@@ -36,22 +41,31 @@ module.exports = class extends Generator {
 
   configuring() {
     this.config.set('ui', this.options.ui);
-    this.config.set('rjs', !!this.options.rjs);
   }
 
   writing() {
-    this.fs.copy(
-      this.templatePath('test.js'),
-      this.destinationPath('test/spec/test.js')
+    // Re-read the content at this point because a composed generator might modify it.
+    const currentPkg = this.fs.readJSON(this.destinationPath('package.json'), {});
+    const scripts = this.fs.readJSON(this.templatePath('package.json')).scripts;
+
+    const pkg = extend(
+      {
+        scripts
+      },
+      currentPkg
     );
 
-    this.fs.copyTpl(
-      this.templatePath('index.html'),
-      this.destinationPath('test/index.html'),
-      {
-        ui: this.options.ui,
-        rjs: this.options.rjs
-      }
+    // Let's extend package.json so we're not overwriting user previous fields
+    this.fs.writeJSON(this.destinationPath('package.json'), pkg);
+
+    this.fs.copy(
+      this.templatePath('test.js'),
+      this.destinationPath(`${this.options.testRoot}/unit/index.spec.js`)
+    );
+
+    this.fs.copy(
+      this.templatePath('spec-helper.js'),
+      this.destinationPath(`${this.options.testRoot}/spec-helper.js`)
     );
   }
 
@@ -64,12 +78,13 @@ module.exports = class extends Generator {
 
     const dependencies = [
       'chai',
-      'mocha'
+      'chai-as-promised',
+      'sinon',
+      'sinon-chai',
+      'proxyquire',
+      'mocha',
+      'nyc'
     ];
-
-    if (this.options.rjs) {
-      dependencies.push('requirejs');
-    }
 
     this.npmInstall(dependencies, {saveDev: true});
   }
